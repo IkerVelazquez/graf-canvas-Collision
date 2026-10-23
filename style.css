@@ -1,0 +1,15 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  /* Oculta las barras de desplazamiento para que el canvas ocupe exactamente toda la pantalla */
+  overflow: hidden;
+  background-color: #f0f0f0;
+}
+
+canvas {
+  display: block;
+}
