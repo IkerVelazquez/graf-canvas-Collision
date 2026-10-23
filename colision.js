@@ -1,7 +1,7 @@
 const canvas = document.getElementById("canvas");
 let ctx = canvas.getContext("2d");
 
-// Obtiene las dimensiones de la pantalla actual
+// Dimensiones de la ventana
 const window_height = window.innerHeight;
 const window_width = window.innerWidth;
 
@@ -15,11 +15,11 @@ class Circle {
         this.posY = y;
         this.radius = radius;
         this.color = color;
-        this.originalColor = color; // Guarda el color original
+        this.originalColor = color; // Atributo POO: guarda el color original para restaurarlo tras flashear
         this.text = text;
         this.speed = speed;
         
-        // Dirección inicial aleatoria en X e Y (-1 o 1)
+        // Asignación de dirección con ángulo aleatorio
         let angle = Math.random() * Math.PI * 2;
         this.dx = Math.cos(angle) * this.speed;
         this.dy = Math.sin(angle) * this.speed;
@@ -41,109 +41,137 @@ class Circle {
     update(context) {
         this.draw(context);
 
-        // Actualizar la posición X
+        // Actualizar posición X
         this.posX += this.dx;
-        // Cambiar la dirección si el círculo llega al borde del canvas en X
+        // Rebote en bordes X
         if (this.posX + this.radius > window_width || this.posX - this.radius < 0) {
             this.dx = -this.dx;
         }
 
-        // Actualizar la posición Y
+        // Actualizar posición Y
         this.posY += this.dy;
-        // Cambiar la dirección si el círculo llega al borde del canvas en Y
+        // Rebote en bordes Y
         if (this.posY + this.radius > window_height || this.posY - this.radius < 0) {
             this.dy = -this.dy;
         }
     }
 
-    // Método para calcular la distancia entre los centros de dos círculos
+    // Método POO: calcula la distancia entre los centros de dos círculos
     getDistance(other) {
         let xDistance = other.posX - this.posX;
         let yDistance = other.posY - this.posY;
         return Math.sqrt(Math.pow(xDistance, 2) + Math.pow(yDistance, 2));
     }
 
-    // Método que verifica si existe colisión con otro círculo
+    // Método POO: evalúa si existe colisión
     isColliding(other) {
         let distance = this.getDistance(other);
         return distance < (this.radius + other.radius);
     }
 
-    // Método para manejar la respuesta a la colisión (rebote y cambio de color)
+    // Método POO: resuelve la colisión con vectores (rebote en dirección opuesta al impacto y flasheo azul)
     resolveCollision(other) {
-        // 1. Cambiar a color azul temporalmente por el impacto ("flasheo")
+        // 1. Activar "flasheo" azul
         this.color = "#0000FF";
         other.color = "#0000FF";
 
-        // 2. Intercambiar las velocidades/direcciones para rebotar opuestamente
-        let tempDx = this.dx;
-        let tempDy = this.dy;
-        this.dx = other.dx;
-        this.dy = other.dy;
-        other.dx = tempDx;
-        other.dy = tempDy;
+        // 2. Vector normal entre los dos centros
+        let dx = other.posX - this.posX;
+        let dy = other.posY - this.posY;
+        let distance = Math.sqrt(dx * dx + dy * dy);
 
-        // 3. Corregir superposición de los círculos para evitar que se "psequence/atoren"
-        let distance = this.getDistance(other);
+        if (distance === 0) return; // Evita división entre cero
+
+        // Vector unitario normal del impacto
+        let nx = dx / distance;
+        let ny = dy / distance;
+
+        // Velocidad relativa
+        let kx = this.dx - other.dx;
+        let ky = this.dy - other.dy;
+
+        // Producto punto entre la velocidad relativa y la normal
+        let p = nx * kx + ny * ky;
+
+        // Rebote: se invierten las componentes sobre la línea de impacto
+        if (p > 0) {
+            this.dx -= p * nx;
+            this.dy -= p * ny;
+            other.dx += p * nx;
+            other.dy += p * ny;
+        }
+
+        // 3. Separación de traslape para evitar que queden atascados
         let overlap = (this.radius + other.radius) - distance;
-        
-        if (overlap > 0 && distance > 0) {
-            let dx = (other.posX - this.posX) / distance;
-            let dy = (other.posY - this.posY) / distance;
-
-            // Separar ambos círculos la mitad de la distancia traslapada
-            this.posX -= dx * (overlap / 2);
-            this.posY -= dy * (overlap / 2);
-            other.posX += dx * (overlap / 2);
-            other.posY += dy * (overlap / 2);
+        if (overlap > 0) {
+            this.posX -= nx * (overlap / 2);
+            this.posY -= ny * (overlap / 2);
+            other.posX += nx * (overlap / 2);
+            other.posY += ny * (overlap / 2);
         }
     }
 }
 
-// Array para almacenar N círculos
+// Array de almacenamiento
 let circles = [];
 
-// Función para generar círculos aleatorios
+// Función para generar 20 círculos sin que aparezcan colisionados desde el inicio
 function generateCircles(n) {
     for (let i = 0; i < n; i++) {
         let radius = Math.random() * 30 + 20; // Radio entre 20 y 50
-        let x = Math.random() * (window_width - radius * 2) + radius;
-        let y = Math.random() * (window_height - radius * 2) + radius;
-        let color = `#${Math.floor(Math.random() * 16777215).toString(16)}`; // Color aleatorio
-        let speed = Math.random() * 4 + 1; // Velocidad entre 1 y 5 unidades
-        let text = `C${i + 1}`; // Etiqueta del círculo
-        
+        let speed = Math.random() * 4 + 1;    // Velocidad entre 1 y 5 unidades
+        let color = `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+        let text = `C${i + 1}`;
+
+        let x, y, overlapping;
+
+        // Intenta posicionar el círculo en una coordenada sin encimarse con los existentes
+        do {
+            overlapping = false;
+            x = Math.random() * (window_width - radius * 2) + radius;
+            y = Math.random() * (window_height - radius * 2) + radius;
+
+            for (let j = 0; j < circles.length; j++) {
+                let dx = x - circles[j].posX;
+                let dy = y - circles[j].posY;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < radius + circles[j].radius) {
+                    overlapping = true;
+                    break;
+                }
+            }
+        } while (overlapping);
+
         circles.push(new Circle(x, y, radius, color, text, speed));
     }
 }
 
-// Función para animar los círculos
+// Bucle de animación
 function animate() {
-    ctx.clearRect(0, 0, window_width, window_height); // Limpiar el canvas
+    ctx.clearRect(0, 0, window_width, window_height);
 
-    // Restablecer los círculos a su color original en cada fotograma
+    // Restablecer el color original en cada fotograma antes de evaluar colisiones
     circles.forEach(circle => {
         circle.color = circle.originalColor;
     });
 
-    // Detectar colisiones entre cada par de círculos
+    // Detectar y resolver colisiones entre todos los pares
     for (let i = 0; i < circles.length; i++) {
         for (let j = i + 1; j < circles.length; j++) {
             if (circles[i].isColliding(circles[j])) {
-                // Resolver el rebote y activar el flasheo azul
                 circles[i].resolveCollision(circles[j]);
             }
         }
     }
 
-    // Dibujar y actualizar la posición de todos los círculos
+    // Dibujar y actualizar círculos
     circles.forEach(circle => {
         circle.update(ctx);
     });
 
-    requestAnimationFrame(animate); // Repetir animación
+    requestAnimationFrame(animate);
 }
 
-// Generar 20 círculos y comenzar la animación
+// Inicialización de la versión 3.0
 generateCircles(20);
 animate();
